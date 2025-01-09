@@ -208,7 +208,7 @@ void conexion_internet(){
         WiFi.softAPdisconnect(true);
     }
 
-    WiFiMulti.addAP("222", "12345678");
+    WiFiMulti.addAP("444", "12345678");
 
     //WiFi.disconnect();
     while(WiFiMulti.run() != WL_CONNECTED) {

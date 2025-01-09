@@ -10,25 +10,24 @@ ESP8266WiFiMulti WiFiMulti;
 SocketIOclient socketIO;
 
 // Pines valvulas
-int pin_valvulaA = 2;
-int pin_valvulaB = 0;
+int pin_valvulaA = 2; // 
+int pin_valvulaB = 0; //
 
 // Pines del encoder
 const int pinA = 5; // Canal A del encoder (GPIO 34)
 const int pinB = 4; // Canal B del encoder (GPIO 35)
 
-int PPR = 4187; // Pulsos por revolucion del encoder
+int PPR = 990.5; // Pulsos por revolucion del encoder
 
 volatile int contadorPulsos = 0; // Cuenta de los pulsos
 volatile int ultimoEstadoA = 0; // Último estado del pin A
 
-int set_anguloA = 45;
-int set_anguloB = -45;
-
+int set_anguloA = 0;
+int set_anguloB = 0;
 
 int prevPos = 1;
 
-int conteo_ciclos = 0;
+float conteo_ciclos = 0;
 int seteo_ciclos = 0;
 
 String inicio_prueba = "";
@@ -74,6 +73,7 @@ void setup() {
 
   pinMode(pin_valvulaA, OUTPUT);
   digitalWrite(pin_valvulaA, LOW);
+
   pinMode(pin_valvulaB, OUTPUT);
   digitalWrite(pin_valvulaB, LOW);
 
@@ -94,7 +94,7 @@ void loop() {
 
 void control(){
   
-  if(inicio_prueba == "NO"){
+  if((inicio_prueba == "NO") && (set_anguloA != 0 && set_anguloB != 0 )) {
 
     tiempo_actual = millis();
   
@@ -110,6 +110,7 @@ void control(){
         Serial.println(contadorPulsos);
         float angulo = (contadorPulsos * 360) / PPR;
         Serial.print("Grados: ");
+
         Serial.println(angulo);
 
         if((angulo >= set_anguloA) && (prevPos == 1 || prevPos == 3)){
@@ -120,6 +121,7 @@ void control(){
           Serial.println("Sentido 1");
 
           conteo_ciclos = conteo_ciclos + 0.5;
+          Serial.println("holaaaa1");
           Serial.print("contador");
           Serial.println(conteo_ciclos);
           prevPos = 2;
@@ -132,6 +134,7 @@ void control(){
           Serial.println("Sentido2");
 
           conteo_ciclos = conteo_ciclos + 0.5;
+          Serial.println("holaaaa2");
           Serial.print("contador");
           Serial.println(conteo_ciclos);
           prevPos = 3;
@@ -146,11 +149,12 @@ void control(){
       seteo_ciclos = 0;
       estado_prueba = "finalizado";
       prevPos = 1;
+      set_anguloA = 0;
+      set_anguloB = 0;
       digitalWrite(pin_valvulaA, LOW);
       digitalWrite(pin_valvulaB, LOW);
     }
   }
-
 }
 
 void socketIOEvent(socketIOmessageType_t type, uint8_t * payload, size_t length) {
@@ -190,10 +194,16 @@ void socketIOEvent(socketIOmessageType_t type, uint8_t * payload, size_t length)
 
                 seteo_ciclos = doc[1]["mensaje"]["seteo_ciclosF"];  // 20
                 set_anguloA = doc[1]["mensaje"]["seteoAnguloA"];
-                set_anguloB = doc[1]["mensaje"]["seteoAnguloB"];
+                int set_anguloB_copia = doc[1]["mensaje"]["seteoAnguloB"];
+                set_anguloB = (set_anguloB_copia) * (-1);
                 inicio_prueba = doc[1]["mensaje"]["pausarF"].as<String>();  // 20
+
+                tiempo_prueba = 0;
+
                 // Mostrar los valores en el monitor serie
                 Serial.println(seteo_ciclos);
+                Serial.println(set_anguloA);
+                Serial.println(set_anguloB);
                 Serial.println(inicio_prueba);
 
                 if( (seteo_ciclos != 0) && (set_anguloA != 0) && (set_anguloB != 0) ){
@@ -258,7 +268,7 @@ void conexion_internet(){
         WiFi.softAPdisconnect(true);
     }
 
-    WiFiMulti.addAP("333", "12345678");
+    WiFiMulti.addAP("4525", "12345678");
 
     //WiFi.disconnect();
     while(WiFiMulti.run() != WL_CONNECTED) {
@@ -269,7 +279,7 @@ void conexion_internet(){
     USE_SERIAL.printf("[SETUP] WiFi Connected %s\n", ip.c_str());
 
     // server address, port and URL
-    socketIO.begin("192.168.137.90", 5000, "/socket.io/?EIO=4");
+    socketIO.begin("192.168.137.32", 5000, "/socket.io/?EIO=4");
     // event handler
     socketIO.onEvent(socketIOEvent);
 }

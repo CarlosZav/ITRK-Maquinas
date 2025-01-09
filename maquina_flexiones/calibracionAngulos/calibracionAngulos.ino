@@ -2,7 +2,7 @@
 const int pinA = 5; // Canal A del encoder (GPIO 34)
 const int pinB = 4; // Canal B del encoder (GPIO 35)
 
-int PPR = 4187;
+float PPR = 990.5;
 
 int prevPos = 1;
 
@@ -44,36 +44,35 @@ void setup() {
 }
 
 void loop() {
-  // Imprimir el contador de pulsos cada 500 ms
   static int ultimoContador = 0;
   if (contadorPulsos != ultimoContador) {
-
     Serial.print("Pulsos: ");
     Serial.println(contadorPulsos);
+
     float angulo = (contadorPulsos * 360) / PPR;
     Serial.print("Grados: ");
     Serial.println(angulo);
 
-    if((angulo >= 45) && (prevPos == 1 || prevPos == 3)){
-      
-      Serial.println("Sentido 1");
+    Serial.print("prevPos: ");
+    Serial.println(prevPos);
 
-      conteo_ciclos = conteo_ciclos + 0.5;
-      Serial.print("contador");
+    if ((angulo >= 45) && (prevPos == 1 || prevPos == 3)) {
+      Serial.println("Sentido 1");
+      conteo_ciclos += 0.5;
+      Serial.println("holaaaa1");
+      Serial.print("contador: ");
       Serial.println(conteo_ciclos);
       prevPos = 2;
-
-    } else if ((angulo <= -45) && (prevPos == 1 || prevPos == 2)){
-        
-      Serial.println("Sentido2");
-
-      conteo_ciclos = conteo_ciclos + 0.5;
-      Serial.print("contador");
+    } else if ((angulo <= -45) && (prevPos == 1 || prevPos == 2)) {
+      Serial.println("Sentido 2");
+      conteo_ciclos += 0.5;
+      Serial.println("holaaaa2");
+      Serial.print("contador: ");
       Serial.println(conteo_ciclos);
       prevPos = 3;
     }
 
     ultimoContador = contadorPulsos;
-
   }
 }
+
