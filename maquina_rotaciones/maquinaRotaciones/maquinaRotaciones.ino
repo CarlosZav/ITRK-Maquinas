@@ -13,6 +13,8 @@ SocketIOclient socketIO;
 int pin_valvulaA = 2; // 
 int pin_valvulaB = 0; //
 
+const int pwmPin = 4;
+
 // Pines del encoder
 const int pinA = 5; // Canal A del encoder (GPIO 34)
 const int pinB = 4; // Canal B del encoder (GPIO 35)
@@ -22,10 +24,12 @@ int PPR = 990.5; // Pulsos por revolucion del encoder
 volatile int contadorPulsos = 0; // Cuenta de los pulsos
 volatile int ultimoEstadoA = 0; // Último estado del pin A
 
+int prevPos = 1;
+
 int set_anguloA = 0;
 int set_anguloB = 0;
 
-int prevPos = 1;
+////////////////////////////////
 
 float conteo_ciclos = 0;
 int seteo_ciclos = 0;
@@ -42,6 +46,8 @@ unsigned long tiempoInicioPausa = 0;
 unsigned long tiempoFinPausa = 0;
 unsigned long tiempoActualPausado = 0;
 unsigned long tiempoPausadoAcumulado = 0;
+
+int setVelocidadFlexion = 0;
  
 #define USE_SERIAL Serial
 
@@ -176,7 +182,6 @@ void socketIOEvent(socketIOmessageType_t type, uint8_t * payload, size_t length)
             socketIO.send(sIOtype_CONNECT, "/");
             break;
         case sIOtype_EVENT:
-            USE_SERIAL.printf("holaaaa");
             USE_SERIAL.printf("[IOc] get event: %s\n", payload);
 
             // Deserializar el payload en un objeto JSON
@@ -201,11 +206,12 @@ void socketIOEvent(socketIOmessageType_t type, uint8_t * payload, size_t length)
                 // El segundo elemento es el objeto que contiene los datos
                 JsonObject data = doc[1].as<JsonObject>();
 
-                seteo_ciclos = doc[1]["mensaje"]["seteo_ciclosF"];  // 20
-                set_anguloA = doc[1]["mensaje"]["seteoAnguloA"];
-                int set_anguloB_copia = doc[1]["mensaje"]["seteoAnguloB"];
+                seteo_ciclos = doc[1]["mensaje"]["setCiclosPlanchasFlexiones"];  // 20
+                setVelocidadFlexion = doc[1]["mensaje"]["setVelocidadFlexiones"];
+                set_anguloA = doc[1]["mensaje"]["setAnguloAPlanchasFlexiones"];
+                int set_anguloB_copia = doc[1]["mensaje"]["seteoAnguloBPlanchasFlexiones"];
                 set_anguloB = (set_anguloB_copia) * (-1);
-                inicio_prueba = doc[1]["mensaje"]["pausarF"].as<String>();  // 20
+                inicio_prueba = doc[1]["mensaje"]["pausarPlanchas"].as<String>();  // 20
 
                 tiempo_prueba = 0;
 
@@ -222,9 +228,9 @@ void socketIOEvent(socketIOmessageType_t type, uint8_t * payload, size_t length)
                   digitalWrite(pin_valvulaB, LOW);
                 }
 
-            }else if (eventName == "mensajeFlexiones_pausar"){
+            }else if (eventName == "mensajePlanchasPausar"){
               JsonObject data = doc[1].as<JsonObject>();
-              inicio_prueba = doc[1]["mensaje"]["pausarF"].as<String>();  // 20
+              inicio_prueba = doc[1]["mensaje"]["pausarPlanchas"].as<String>();  // 20
               Serial.println(inicio_prueba);
 
 
@@ -237,10 +243,8 @@ void socketIOEvent(socketIOmessageType_t type, uint8_t * payload, size_t length)
                 tiempoFinPausa = millis();
                 tiempoActualPausado = tiempoFinPausa - tiempoInicioPausa;
                 tiempoPausadoAcumulado = tiempoPausadoAcumulado + tiempoActualPausado;
-                estado_prueba = "Sistema trabajando";
+                estado_prueba = "Sistema funcionando";
               }
-
-
             }
 
                 // Verificar si las claves existen y obtener los valores con seguridad
@@ -293,7 +297,7 @@ void conexion_internet(){
         WiFi.softAPdisconnect(true);
     }
 
-    WiFiMulti.addAP("4525", "12345678");
+    WiFiMulti.addAP("ITK-Servidor", "atazavcan");
 
     //WiFi.disconnect();
     while(WiFiMulti.run() != WL_CONNECTED) {
@@ -304,7 +308,7 @@ void conexion_internet(){
     USE_SERIAL.printf("[SETUP] WiFi Connected %s\n", ip.c_str());
 
     // server address, port and URL
-    socketIO.begin("192.168.137.32", 5000, "/socket.io/?EIO=4");
+    socketIO.begin("192.168.0.101", 5000, "/socket.io/?EIO=4");
     // event handler
     socketIO.onEvent(socketIOEvent);
 }

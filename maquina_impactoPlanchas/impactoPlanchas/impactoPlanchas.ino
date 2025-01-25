@@ -10,28 +10,21 @@ ESP8266WiFiMulti WiFiMulti;
 SocketIOclient socketIO;
 
 // Pines valvulas
-int pin_valvulaA = 2; // 
-int pin_valvulaB = 0; //
+const int pin_valvulaA = 2; // Apagado arriba, Prendido baja
 
-// Pines del encoder
-const int pinA = 5; // Canal A del encoder (GPIO 34)
-const int pinB = 4; // Canal B del encoder (GPIO 35)
-
-int PPR = 990.5; // Pulsos por revolucion del encoder
-
-volatile int contadorPulsos = 0; // Cuenta de los pulsos
-volatile int ultimoEstadoA = 0; // Último estado del pin A
-
-int set_anguloA = 0;
-int set_anguloB = 0;
-
-int prevPos = 1;
+int setTiempoPrendido = 0;
+int setTiempoApagado = 0;
 
 float conteo_ciclos = 0;
 int seteo_ciclos = 0;
 
+int prevPos = 1;
+
 String inicio_prueba = "";
 String estado_prueba = "Sin iniciar";
+
+unsigned long tiempoPruebaA = 0;
+unsigned long tiempoPruebaB = 0;
 
 unsigned long tiempo_prueba = 0;
 unsigned long tiempo_inicio = 0;
@@ -42,45 +35,22 @@ unsigned long tiempoInicioPausa = 0;
 unsigned long tiempoFinPausa = 0;
 unsigned long tiempoActualPausado = 0;
 unsigned long tiempoPausadoAcumulado = 0;
+
+bool estadoValvula = false;
+bool enPausa = false;
+
+int verificarTiempoArriba;
+int verificarTiempoBajo;
  
 #define USE_SERIAL Serial
-
-void IRAM_ATTR encoderISR() {
-  int estadoA = digitalRead(pinA);
-  int estadoB = digitalRead(pinB);
-
-  // Determinar dirección según el cambio de estados
-  if (estadoA != ultimoEstadoA) {
-    if (estadoA == estadoB) {
-      contadorPulsos++; // Girando en sentido horario
-    } else {
-      contadorPulsos--; // Girando en sentido antihorario
-    }
-  }
-  ultimoEstadoA = estadoA; // Actualizar el estado previo
-}
-
 
 void setup() {
   USE_SERIAL.begin(115200);
 
   USE_SERIAL.setDebugOutput(true);
 
-  // Configurar pines del encoder como entradas
-  pinMode(pinA, INPUT);
-  pinMode(pinB, INPUT);
-
-  // Leer estado inicial del canal A
-  ultimoEstadoA = digitalRead(pinA);
-
-  // Configurar interrupción para el canal A
-  attachInterrupt(digitalPinToInterrupt(pinA), encoderISR, CHANGE);
-
   pinMode(pin_valvulaA, OUTPUT);
   digitalWrite(pin_valvulaA, LOW);
-
-  pinMode(pin_valvulaB, OUTPUT);
-  digitalWrite(pin_valvulaB, LOW);
 
   conexion_internet();
 
@@ -89,7 +59,6 @@ void setup() {
 void loop() {
 
   socketIO.loop();
-  // put your main code here, to run repeatedly:
 
   control();
 
@@ -99,69 +68,51 @@ void loop() {
 
 void control(){
   
-  if((inicio_prueba == "NO") && (set_anguloA != 0 && set_anguloB != 0 )) {
+  if((inicio_prueba == "NO") && (setTiempoApagado !=0 && setTiempoPrendido !=0 )) {
 
     tiempo_actual = millis();
 
+    tiempo_prueba = (tiempo_actual - tiempo_inicio - tiempoPausadoAcumulado) / 1000;
+    
+    estado_prueba = "Sistema funcionando";
 
-    tiempo_prueba = (tiempo_actual - tiempo_inicio - tiempoPausadoAcumulado) / 1000; 
+    tiempoPruebaA = tiempo_prueba *1000 - tiempoPruebaB;
 
-    if((conteo_ciclos < seteo_ciclos) && (seteo_ciclos > 0)){
+    if((conteo_ciclos < seteo_ciclos ) && (seteo_ciclos > 0)){
 
-      static int ultimoContador = 0;
+      if ((tiempoPruebaA >= setTiempoPrendido) && (prevPos == 1)) { // Aquí se apaga la valvula
+        digitalWrite(pin_valvulaA, LOW);
 
-      if (contadorPulsos != ultimoContador) {
+        tiempoPruebaB = tiempoPruebaB + setTiempoPrendido;
 
-        Serial.print("Pulsos: ");
-        Serial.println(contadorPulsos);
-        float angulo = (contadorPulsos * 360) / PPR;
-        Serial.print("Grados: ");
+        prevPos = 2;
+        conteo_ciclos = conteo_ciclos + 0.5;
+        Serial.println("Abajo");
+        Serial.print("Ciclos: ");
+        Serial.println(conteo_ciclos);
 
-        Serial.println(angulo);
-
-        if((angulo >= set_anguloA) && (prevPos == 1 || prevPos == 3)){
-          
-          digitalWrite(pin_valvulaA, HIGH);
-          digitalWrite(pin_valvulaB, LOW);
-
-          Serial.println("Sentido 1");
-
-          conteo_ciclos = conteo_ciclos + 0.5;
-          Serial.println("holaaaa1");
-          Serial.print("contador");
-          Serial.println(conteo_ciclos);
-          prevPos = 2;
-
-        } else if ((angulo <= set_anguloB) && (prevPos == 1 || prevPos == 2)){
-            
-          digitalWrite(pin_valvulaA, LOW);
-          digitalWrite(pin_valvulaB, HIGH);
-
-          Serial.println("Sentido2");
-
-          conteo_ciclos = conteo_ciclos + 0.5;
-          Serial.println("holaaaa2");
-          Serial.print("contador");
-          Serial.println(conteo_ciclos);
-          prevPos = 3;
-        }
-
-        ultimoContador = contadorPulsos;
-
+      } else if((tiempoPruebaA >= setTiempoApagado) && (prevPos == 2)){ // Aquí se activa la valvula
+        digitalWrite(pin_valvulaA, HIGH);
+        tiempoPruebaB = tiempoPruebaB + setTiempoApagado;
+        prevPos = 1;
+        conteo_ciclos = conteo_ciclos + 0.5;
+        Serial.println("Arriba");
+        Serial.print("Ciclos: ");
+        Serial.println(conteo_ciclos);
       }
 
     } else {
+      tiempoPruebaB = 0;
+      tiempoPruebaA = 0;
       conteo_ciclos = 0;
       seteo_ciclos = 0;
       estado_prueba = "finalizado";
       prevPos = 1;
-      set_anguloA = 0;
-      set_anguloB = 0;
+      setTiempoPrendido = 0;
+      setTiempoApagado = 0;
       tiempoActualPausado = 0;
       tiempoPausadoAcumulado = 0;
       digitalWrite(pin_valvulaA, LOW);
-      digitalWrite(pin_valvulaB, LOW);
-
     }
   } 
 }
@@ -176,7 +127,6 @@ void socketIOEvent(socketIOmessageType_t type, uint8_t * payload, size_t length)
             socketIO.send(sIOtype_CONNECT, "/");
             break;
         case sIOtype_EVENT:
-            USE_SERIAL.printf("holaaaa");
             USE_SERIAL.printf("[IOc] get event: %s\n", payload);
 
             // Deserializar el payload en un objeto JSON
@@ -196,58 +146,60 @@ void socketIOEvent(socketIOmessageType_t type, uint8_t * payload, size_t length)
             USE_SERIAL.printf("Evento recibido: %s\n", eventName.c_str());
 
             // Comprobar el nombre del evento y obtener los datos correspondientes
-            if (eventName == "mensajeFlexiones") {
+            if (eventName == "mensajePlanchas") {
 
                 // El segundo elemento es el objeto que contiene los datos
                 JsonObject data = doc[1].as<JsonObject>();
 
-                seteo_ciclos = doc[1]["mensaje"]["seteo_ciclosF"];  // 20
-                set_anguloA = doc[1]["mensaje"]["seteoAnguloA"];
-                int set_anguloB_copia = doc[1]["mensaje"]["seteoAnguloB"];
-                set_anguloB = (set_anguloB_copia) * (-1);
-                inicio_prueba = doc[1]["mensaje"]["pausarF"].as<String>();  // 20
+                seteo_ciclos = doc[1]["mensaje"]["setCiclos"];  // 20
+                setTiempoApagado = doc[1]["mensaje"]["setTiempoElevado"];
+                setTiempoPrendido = doc[1]["mensaje"]["setTiempoBajo"];
+                inicio_prueba = doc[1]["mensaje"]["pausar"].as<String>();  // 20
 
                 tiempo_prueba = 0;
 
-                estado_prueba = "Sistema funcionando";
                 // Mostrar los valores en el monitor serie
                 Serial.println(seteo_ciclos);
-                Serial.println(set_anguloA);
-                Serial.println(set_anguloB);
+                Serial.println(setTiempoPrendido);
+                Serial.println(setTiempoApagado);
                 Serial.println(inicio_prueba);
 
-                if( (seteo_ciclos != 0) && (set_anguloA != 0) && (set_anguloB != 0) ){
+                if( (seteo_ciclos != 0) && (setTiempoPrendido != 0) && (setTiempoApagado != 0) ){
                   tiempo_inicio = millis();
-                  digitalWrite(pin_valvulaA, HIGH);
-                  digitalWrite(pin_valvulaB, LOW);
+                  digitalWrite(pin_valvulaA, LOW);
+
+                  conteo_ciclos = 0;
+                  prevPos = 1;
+                  tiempoActualPausado = 0;
+                  tiempoPausadoAcumulado = 0;
+                  tiempoPruebaB = 0;
+                  tiempoPruebaA = 0;
                 }
 
-            }else if (eventName == "mensajeFlexiones_pausar"){
+            }else if (eventName == "mensajePlanchasPausar"){
               JsonObject data = doc[1].as<JsonObject>();
-              inicio_prueba = doc[1]["mensaje"]["pausarF"].as<String>();  // 20
+              inicio_prueba = doc[1]["mensaje"]["pausar"].as<String>();  // 20
               Serial.println(inicio_prueba);
 
-
-              if(inicio_prueba == "SI"){
-
+              if(inicio_prueba == "SI" && !enPausa){
                 tiempoInicioPausa = millis();
                 estado_prueba = "Sistema Pausado";
+                enPausa = true;
 
-              } else if (inicio_prueba == "NO") {
+              } else if (inicio_prueba == "NO" && enPausa) {
                 tiempoFinPausa = millis();
+                enPausa = false;
                 tiempoActualPausado = tiempoFinPausa - tiempoInicioPausa;
                 tiempoPausadoAcumulado = tiempoPausadoAcumulado + tiempoActualPausado;
+
                 estado_prueba = "Sistema trabajando";
               }
-
-
             }
 
                 // Verificar si las claves existen y obtener los valores con seguridad
             break;
     }
 }
-
 
 void mandar_datos(){
   uint64_t now = millis();
@@ -261,7 +213,7 @@ void mandar_datos(){
 
         // add evnet name
         // Hint: socket.on('event_name', ....
-        array.add("datos_espFlexiones");
+        array.add("datosEspPlanchas");
 
         // add payload (parameters) for the event
         JsonObject param1 = array.createNestedObject();
@@ -293,7 +245,9 @@ void conexion_internet(){
         WiFi.softAPdisconnect(true);
     }
 
-    WiFiMulti.addAP("4525", "12345678");
+    //Totalplay-2.4G-d150
+    //sqmZpzt5LPggsFkQ
+    WiFiMulti.addAP("ITK-Servidor", "atazavcan");
 
     //WiFi.disconnect();
     while(WiFiMulti.run() != WL_CONNECTED) {
@@ -304,8 +258,7 @@ void conexion_internet(){
     USE_SERIAL.printf("[SETUP] WiFi Connected %s\n", ip.c_str());
 
     // server address, port and URL
-    socketIO.begin("192.168.137.32", 5000, "/socket.io/?EIO=4");
+    socketIO.begin("192.168.0.101", 5000, "/socket.io/?EIO=4");
     // event handler
     socketIO.onEvent(socketIOEvent);
 }
-
