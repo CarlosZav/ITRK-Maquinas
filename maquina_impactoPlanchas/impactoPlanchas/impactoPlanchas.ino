@@ -5,6 +5,7 @@
 #include <WebSocketsClient.h>
 #include <SocketIOclient.h>
 #include <Hash.h>
+#include <EEPROM.h>
 
 ESP8266WiFiMulti WiFiMulti;
 SocketIOclient socketIO;
@@ -12,14 +13,22 @@ SocketIOclient socketIO;
 // Pines valvulas
 const int pin_valvulaA = 2; // Apagado arriba, Prendido baja
 
-int setTiempoPrendido = 0;
-int setTiempoApagado = 0;
+float setTiempoPrendido = 0;
+float setTiempoApagado = 0;
 
 float conteo_ciclos = 0;
 int seteo_ciclos = 0;
 
+#define dirConteoCiclos       0     // float → 4 bytes
+#define dirTiempoReinicio     4     // unsigned long → 4 bytes
+#define dirInicioPrueba       8     // int → 2 bytes
+#define dirSeteoCiclos       10     // int → 2 bytes
+#define dirTiempoPrendido    12     // float → 4 bytes
+#define dirTiempoApagado     16     // float → 4 byte
+
 int prevPos = 1;
 
+int inicioPruebaEntero = 1;
 String inicio_prueba = "";
 String estado_prueba = "Sin iniciar";
 
@@ -36,6 +45,8 @@ unsigned long tiempoFinPausa = 0;
 unsigned long tiempoActualPausado = 0;
 unsigned long tiempoPausadoAcumulado = 0;
 
+unsigned long tiempo_pruebaReinicio = 0;
+
 bool estadoValvula = false;
 bool enPausa = false;
 
@@ -45,6 +56,10 @@ int verificarTiempoBajo;
 #define USE_SERIAL Serial
 
 void setup() {
+
+  // Initialize EEPROM with 512 bytes
+  EEPROM.begin(512);
+
   USE_SERIAL.begin(115200);
 
   USE_SERIAL.setDebugOutput(true);
@@ -54,6 +69,12 @@ void setup() {
 
   conexion_internet();
 
+  EEPROM.get(dirConteoCiclos, conteo_ciclos);
+  EEPROM.get(dirTiempoReinicio, tiempo_pruebaReinicio);
+  EEPROM.get(dirInicioPrueba, inicioPruebaEntero);
+  EEPROM.get(dirSeteoCiclos, seteo_ciclos);
+  EEPROM.get(dirTiempoPrendido, setTiempoPrendido);
+  EEPROM.get(dirTiempoApagado, setTiempoApagado);
 }
 
 void loop() {
@@ -68,11 +89,11 @@ void loop() {
 
 void control(){
   
-  if((inicio_prueba == "NO") && (setTiempoApagado !=0 && setTiempoPrendido !=0 )) {
+  if((inicio_prueba == "NO" || inicioPruebaEntero == 0) && (setTiempoApagado !=0 && setTiempoPrendido !=0 )) {
 
     tiempo_actual = millis();
 
-    tiempo_prueba = (tiempo_actual - tiempo_inicio - tiempoPausadoAcumulado) / 1000;
+    tiempo_prueba = ((tiempo_actual - tiempo_inicio - tiempoPausadoAcumulado) / 1000) + tiempo_pruebaReinicio;
     
     estado_prueba = "Sistema funcionando";
 
@@ -101,6 +122,10 @@ void control(){
         Serial.println(conteo_ciclos);
       }
 
+      EEPROM.put(dirConteoCiclos, conteo_ciclos);
+      EEPROM.put(dirTiempoReinicio, tiempo_prueba);
+      EEPROM.commit(); // Save changes to flash memory
+
     } else {
       tiempoPruebaB = 0;
       tiempoPruebaA = 0;
@@ -112,6 +137,11 @@ void control(){
       setTiempoApagado = 0;
       tiempoActualPausado = 0;
       tiempoPausadoAcumulado = 0;
+
+      EEPROM.put(dirConteoCiclos, conteo_ciclos);
+      EEPROM.put(dirTiempoReinicio, tiempo_prueba);
+      EEPROM.commit(); // Save changes to flash memory
+
       digitalWrite(pin_valvulaA, LOW);
     }
   } 
@@ -164,6 +194,18 @@ void socketIOEvent(socketIOmessageType_t type, uint8_t * payload, size_t length)
                 Serial.println(setTiempoApagado);
                 Serial.println(inicio_prueba);
 
+                if (inicio_prueba == "NO"){
+                  inicioPruebaEntero = 0;
+                } else{
+                  inicioPruebaEntero = 1;
+                }
+
+                EEPROM.put(dirInicioPrueba, inicioPruebaEntero);
+                EEPROM.put(dirSeteoCiclos, seteo_ciclos);
+                EEPROM.put(dirTiempoPrendido, setTiempoPrendido);
+                EEPROM.put(dirTiempoApagado, setTiempoApagado); 
+                EEPROM.commit(); // Save changes to flash memory            
+
                 if( (seteo_ciclos != 0) && (setTiempoPrendido != 0) && (setTiempoApagado != 0) ){
                   tiempo_inicio = millis();
                   digitalWrite(pin_valvulaA, LOW);
@@ -194,6 +236,16 @@ void socketIOEvent(socketIOmessageType_t type, uint8_t * payload, size_t length)
 
                 estado_prueba = "Sistema trabajando";
               }
+
+              if (inicio_prueba == "NO"){
+                inicioPruebaEntero = 0;
+              } else{
+                inicioPruebaEntero = 1;
+              }
+
+              EEPROM.put(dirInicioPrueba, inicioPruebaEntero);
+              EEPROM.commit(); // Save changes to flash memory
+
             }
 
                 // Verificar si las claves existen y obtener los valores con seguridad

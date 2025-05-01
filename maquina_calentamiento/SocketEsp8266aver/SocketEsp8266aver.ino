@@ -13,7 +13,16 @@
 ESP8266WiFiMulti WiFiMulti;
 SocketIOclient socketIO;
 
-int ssrPin = 5;
+const int ssrPin = 5;
+
+//const int PIN_SENSOR = 5;       // Cambia esto por el pin correcto
+const int OFFSET = 2048;         // Ajusta esto con tu sensor en reposo
+const float SENSIBILIDAD_ADC = 124.0;  // puntos ADC por ampere
+const unsigned long INTERVALO = 1000;  // 1 segundo
+
+int contador = 0;
+long suma_cuadrados = 0;
+unsigned long tiempo_inicio = 0;
 
 // Variables para controlar el tiempo de conmutación
 unsigned long tiempoEncendido = 0;  // Tiempo de encendido (valor predeterminado 5 segundos)
@@ -33,10 +42,17 @@ unsigned long seteo_tiempoPrendido = 0;
 int seteo_ciclos2 = 0;
 
 //Variables para medir corriente con el sensor
-const int pinSensor = A0;  // Pin para el sensor de corriente
 int valorADC = 0;
 float voltajeSensor = 0;
 float corriente = 0;
+
+const int pinSensor = A0;          // Pin del sensor ACS712
+const int numMuestras = 500;       // Muestras por segundo
+const float voltajeReferencia = 5.0;  // Voltaje de referencia del ADC
+const float offset = 2.5;          // Offset del sensor en V (sin carga)
+
+const float sensibilidad = 0.1;  // Para ACS712-20A → 100 mV/A
+
 
 #define USE_SERIAL Serial
 
@@ -84,6 +100,8 @@ void socketIOEvent(socketIOmessageType_t type, uint8_t * payload, size_t length)
                 Serial.println(seteo_ciclos);
                 Serial.println(tiempoApagado);
                 Serial.println(tiempoEncendido);
+
+                tiempo_inicio = millis();
             }
 
                 // Verificar si las claves existen y obtener los valores con seguridad
@@ -119,7 +137,7 @@ void setup() {
         WiFi.softAPdisconnect(true);
     }
 
-    WiFiMulti.addAP("222", "12345678");
+    WiFiMulti.addAP("ITK-Servidor", "atazavcan");
 
     //WiFi.disconnect();
     while(WiFiMulti.run() != WL_CONNECTED) {
@@ -130,7 +148,7 @@ void setup() {
     USE_SERIAL.printf("[SETUP] WiFi Connected %s\n", ip.c_str());
 
     // server address, port and URL
-    socketIO.begin("192.168.137.92", 5000, "/socket.io/?EIO=4");
+    socketIO.begin("192.168.0.101", 5000, "/socket.io/?EIO=4");
 
     // event handler
     socketIO.onEvent(socketIOEvent);
@@ -243,18 +261,31 @@ void mandar_datos(){
 }
 
 void medir_sensor(){
-  // Leer el valor analógico del pin del sensor
-  valorADC = analogRead(pinSensor);
+  unsigned long tiempo_actual = millis();
 
-  Serial.println(valorADC);
-  // Convertir el valor ADC a voltaje
-  voltajeSensor = (valorADC * 3.3) / 1024;
-  // Calcular la corriente a partir del voltaje del sensor
-  // Restamos el voltaje base (mitad de referencia para el ACS712)
-  corriente = (voltajeSensor - (3.3 / 2)) / 0.04;
+  // Si aún estamos dentro del intervalo de 1 segundo
+  if (tiempo_actual - tiempo_inicio < INTERVALO) {
+    int lectura = analogRead(ssrPin);
+    int diferencia = lectura - OFFSET;
+    suma_cuadrados += diferencia * diferencia;
+    contador++;
+  }
 
-  yield();
+  // Si ya pasó 1 segundo, calcular y reiniciar
+  if (tiempo_actual - tiempo_inicio >= INTERVALO) {
+    if (contador > 0) {  // Evitar división por cero
+      float rms_adc = sqrt((float)suma_cuadrados / contador);
+      corriente = rms_adc / SENSIBILIDAD_ADC;
 
-  delay(100);
+      Serial.print("Corriente RMS: ");
+      Serial.print(corriente);
+      Serial.println(" A");
+    }
+
+    // Reiniciar todo
+    suma_cuadrados = 0;
+    contador = 0;
+    tiempo_inicio = millis();  // empezar nuevo ciclo
+  }
 
 }

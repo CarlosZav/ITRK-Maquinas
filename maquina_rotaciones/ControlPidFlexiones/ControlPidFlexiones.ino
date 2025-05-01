@@ -1,138 +1,186 @@
-// Asignación de pines
-const int pinA = 5; // Canal A del encoder (GPIO 34)
-const int pinB = 4; // Canal B del encoder (GPIO 35)
+//4207
+//4235
+//4187
+//4210
+//4222
 
-const pinPWM = 2;
+// ****4210
 
-// Constantes del controlador PID
-double Kp = 2.0, Ki = 5.0, Kd = 1.0;
+// Pines del encoder
+const int encoderPinA = 18;
+const int encoderPinB = 19;
 
-int PPR = 900;
+//Pines para el control del motor
+const int pinPWMA = 21;
+const int pinPWMB = 25;
+const int pinMotorA = 22;
+const int pinMotorB = 23;
 
-// Variables del controlador
-double velocidadActual, valorPwmCalculado, Setpoint = 40;  // Setpoint = valor objetivo en rpms
-double error, lastError, cumError, rateError;
-unsigned long currentTime, previousTime;
-double elapsedTime;
+float gradosActuales = 0;
 
-//Variables para el conteo con encoder
-volatile int contadorPulsos = 0; // Cuenta de los pulsos
-volatile int ultimoEstadoA = 0; // Último estado del pin A
+// Número de pulsos por revolución del encoder
+const int PPR =  4210;  // Cambia este valor según tu encoder
 
-const int controlMotor1 = 6;
-const int controlMotor2 = 7;
+// Variables para el contador de pulsos y la velocidad
+volatile long pulseCount = 0;
+volatile long pulseCountGrades = 0;
+unsigned long lastTime = 0;
+float velocidadRPM = 0;
+int direction = 1;  // 1 para adelante, -1 para atrás
 
-const long tiempoCalculoVelocidad = 100;
-unsigned long previousMillis = 0;
-unsigned long currentTime = 0;
+//Valor para saturacion de la señál de repuesta
+float velocidadMax = 120.0; //Velocidad Maxima del motor en rpm
+float velocidadMin = 20.0; //Velocidad minima a la que el motor se e piez a a mover
+
+//variavles PID
+float cv = 0;
+float cv1 = 0;
+float error = 0;
+float error1 = 0;
+float error2 = 0;
+float kp = 3.26;
+float ki = 0.0001;
+float kd = 0.31;
+float tm = 0.1;
+float setPoint = 60; // Pedirselo al usuario en rpm 93.5 max
 
 
-
+// Función de interrupción para contar los pulsos del encoder
 void IRAM_ATTR encoderISR() {
-  int estadoA = digitalRead(pinA);
-  int estadoB = digitalRead(pinB);
+  // Lee el estado de los pines A y B
+  int stateA = digitalRead(encoderPinA);
+  int stateB = digitalRead(encoderPinB);
 
-  // Determinar dirección según el cambio de estados
-  if (estadoA != ultimoEstadoA) {
-    if (estadoA == estadoB) {
-      contadorPulsos++; // Girando en sentido horario
+  // Determina la dirección basada en la secuencia de los pulsos
+  if (stateA == HIGH) {
+    if (stateB == LOW) {
+      direction = 1;  // Rotación en sentido horario
     } else {
-      contadorPulsos--; // Girando en sentido antihorario
+      direction = -1; // Rotación en sentido antihorario
+    }
+  } else {
+    if (stateB == HIGH) {
+      direction = 1;  // Rotación en sentido horario
+    } else {
+      direction = -1; // Rotación en sentido antihorario
     }
   }
-  ultimoEstadoA = estadoA; // Actualizar el estado previo
 
+  // Incrementa o decrementa el contador de pulsos según la dirección
+  pulseCount += direction;
+  pulseCountGrades += direction;
 }
 
-
-
 void setup() {
+  // Inicializa la comunicación serial
+  Serial.begin(115200);
 
-  //Seteo de pines de contro de giro del motor
-  pinMode(controlMotor1, OUTPUT);
-  digitalWrite(pin_valvulaA, LOW);
+  // Configura los pines del encoder como entradas
+  pinMode(encoderPinA, INPUT);
+  pinMode(encoderPinB, INPUT);
 
-  pinMode(controlMotor2, OUTPUT);
-  digitalWrite(pin_valvulaB, LOW);
+  pinMode(pinMotorA, OUTPUT);
+  digitalWrite(pinMotorA, HIGH);
 
-  // Configurar pines del encoder como entradas
-  pinMode(pinA, INPUT);
-  pinMode(pinB, INPUT);
+  pinMode(pinMotorB, OUTPUT);
+  digitalWrite(pinMotorB, HIGH);
 
-  // Leer estado inicial del canal A
-  ultimoEstadoA = digitalRead(pinA);
+  pinMode(pinPWMA, OUTPUT);
+  pinMode(pinPWMB, OUTPUT);
 
-  // Configuración del pin para el control de PWM
-  pinMode(pinPWM, OUTPUT);
+  analogWrite(pinPWMA, 0);
+  analogWrite(pinPWMB, 0);
 
-  // Configurar interrupción para el canal A
-  attachInterrupt(digitalPinToInterrupt(pinA), encoderISR, CHANGE);
-
-  Serial.begin(9600);
-
+  // Configura la interrupción en el pin A del encoder
+  attachInterrupt(digitalPinToInterrupt(encoderPinA), encoderISR, CHANGE);
 }
 
 void loop() {
 
-  // Realizar el calculo de la velocidad actual
-  calcularVelocidadActual();
+  calcularGrados();
+  calcularVelocidad();
+  controlPID();
 
-  // Llama a la función PID para calcular la salida
-  valorPwmCalculado = computePID(velocidadActual);
+  //delay(100);
 
-  // Mapea la salida del PID a un rango de PWM (0-255)
-  int pwmValue = map(Output, 0, 100, 0, 255);
-
-  // Aplica el valor PWM al motor (0-255)
-  analogWrite(PIN_OUTPUT, pwmValue);
-
-  // Imprime los valores para depuración
-  Serial.print("Setpoint: ");
-  Serial.print(Setpoint);
-  Serial.print("\tInput: ");
-  Serial.print(Input);
-  Serial.print("\tPID Output: ");
-  Serial.print(Output);
-  Serial.print("\tPWM: ");
-  Serial.println(pwmValue);
-
-  delay(100);  // Retraso para evitar lecturas rápidas
 }
 
-double computePID(double inp) {
-  currentTime = millis();                          // Obtener el tiempo actual
-  elapsedTime = (double)(currentTime - previousTime); // Calcular el tiempo transcurrido
+void calcularVelocidad(){
+  // Obtén el tiempo actual
+  unsigned long currentTime = millis();
 
-  error = Setpoint - Input;                        // Calcular el error
-  cumError += error * elapsedTime;                 // Calcular la integral del error
-  rateError = (error - lastError) / elapsedTime;   // Calcular la derivada del error
+  // Calcula la velocidad cada 100 ms
+  if (currentTime - lastTime >= 100) {
+    // Desactiva las interrupciones temporalmente para evitar inconsistencias
+    noInterrupts();
+    long pulses = labs(pulseCount);
+    pulseCount = 0;
+    interrupts();
 
-  double output = Kp * error + Ki * cumError + Kd * rateError;  // Salida del PID
+    // Calcula la velocidad en RPM
+    velocidadRPM = (pulses * 60000.0) / (PPR * (currentTime - lastTime));
 
-  // Limitar la salida del PID al rango 0-100%
-  output = constrain(output, 0, 250);
+    // Actualiza el tiempo de la última medición
+    lastTime = currentTime;
 
-  lastError = error;                               // Almacenar el error anterior
-  previousTime = currentTime;                      // Almacenar el tiempo anterior
-
-  return output;
-}
-
-void calcularVelocidadActual(){
-  unsigned long currentMillis = millis();  // Obtener el tiempo actual
-
-  // Calcular la velocidad cada segundo
-  if (currentMillis - previousMillis >= tiempoCalculoVelocidad) {
-    previousMillis = currentMillis;  // Actualizar el tiempo de referencia
-
-    // Calcular la velocidad en RPM (Revoluciones por minuto)
-    velocidadActual = (contadorPulsos / PPR) * (60000.0 / tiempoCalculoVelocidad);  // Dividir entre 2 si el encoder tiene 2 pulsos por revolución
-
-    // Mostrar la velocidad en el monitor serial
-    Serial.print("Velocidad del motor: ");
-    Serial.print(velocidadActual);
-    Serial.println(" RPM");
-
-    contadorPulsos = 0;  // Resetear el contador de pulsos para el siguiente cálculo
+    // Muestra la velocidad en RPM por el monitor serial
+    Serial.print("Velocidad: ");
+    Serial.print(velocidadRPM);
+    Serial.print(" RPM, Dirección: ");
+    if (direction == 1) {
+      Serial.println("Adelante");
+    } else {
+      Serial.println("Atrás");
+    }
+    Serial.print("SetPoint = ");
+    Serial.println(setPoint);
+    Serial.print("Velocidad = ");
+    Serial.println(velocidadRPM);
+    Serial.print("Valor de cv = ");
+    Serial.println(cv);
+    Serial.print("error");
+    Serial.println(error);
   }
+}
+
+void calcularGrados(){
+  gradosActuales = (pulseCountGrades * 360) / PPR;
+  /*Serial.print("Pulsos: ");
+  Serial.println(pulseCountGrades);
+  Serial.print("Grados: ");
+  Serial.println(gradosActuales);
+  */
+}
+
+void controlPID(){
+  error = setPoint - velocidadRPM;
+
+  //Ecuacion control PID discreto
+  cv = cv1 + (kp + kd / tm) * error + (-kp+ki*tm - 2*kd/tm) * error1 + (kd/tm)*error2;
+  error2 = error1;
+  error1 = error;
+
+  if (cv > velocidadMax){
+    cv = velocidadMax;
+  } else if (cv < velocidadMin){
+    cv = velocidadMin;
+  }
+
+  cv1 = cv;
+
+  analogWrite(pinPWMA, (cv*255) / 120);
+  // ledcWriteChannel(canalPWM1, (cv*255) / 120);    // PWM en GPIO 5
+  //ledcWriteChannel(canalPWM2, 0);    // PWM en GPIO 5
+  analogWrite(pinPWMB, 0);
+
+  /*Serial.print("valor de pwm");
+  Serial.println((cv*255) / 120);*/
+
+  /*
+  Serial.print("SetPoint = ");
+  Serial.println(setPoint);
+  Serial.print("Velocidad = ");
+  Serial.println(velocidadRPM);
+  Serial.print("Valor de cv = ");
+  Serial.println(cv);*/
 }

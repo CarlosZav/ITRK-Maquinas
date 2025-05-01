@@ -1,78 +1,37 @@
-// Pines del encoder
-const int pinA = 5; // Canal A del encoder (GPIO 34)
-const int pinB = 4; // Canal B del encoder (GPIO 35)
+#include <Arduino.h>
 
-float PPR = 990.5;
+volatile int contadorPulsos = 0;
+const int pinEncoderA = 18; // GPIO de la señal A del encoder
+const int pinEncoderB = 19; // GPIO de la señal B del encoder
+const int pulsosPorRevolucion = 600; // Número de pulsos por vuelta del encoder
 
-int prevPos = 1;
+int ultimoContadorPulsos = 0; // Variable para almacenar el último valor de contadorPulsos
 
-float conteo_ciclos = 0;
-          
-// Variables globales
-volatile int contadorPulsos = 0; // Cuenta de los pulsos
-volatile int ultimoEstadoA = 0; // Último estado del pin A
-
-void IRAM_ATTR encoderISR() {
-  int estadoA = digitalRead(pinA);
-  int estadoB = digitalRead(pinB);
-
-  // Determinar dirección según el cambio de estados
-  if (estadoA != ultimoEstadoA) {
-    if (estadoA == estadoB) {
-      contadorPulsos++; // Girando en sentido horario
-    } else {
-      contadorPulsos--; // Girando en sentido antihorario
-    }
+void IRAM_ATTR contarPulsos() {
+  int estadoB = digitalRead(pinEncoderB);
+  if (estadoB == HIGH) {
+    contadorPulsos++;
+  } else {
+    contadorPulsos--;
   }
-  ultimoEstadoA = estadoA; // Actualizar el estado previo
 }
 
 void setup() {
   Serial.begin(115200);
-
-  // Configurar pines del encoder como entradas
-  pinMode(pinA, INPUT);
-  pinMode(pinB, INPUT);
-
-  // Leer estado inicial del canal A
-  ultimoEstadoA = digitalRead(pinA);
-
-  // Configurar interrupción para el canal A
-  attachInterrupt(digitalPinToInterrupt(pinA), encoderISR, CHANGE);
-
-  Serial.println("Iniciando lectura del encoder...");
+  pinMode(pinEncoderA, INPUT);
+  pinMode(pinEncoderB, INPUT);
+  attachInterrupt(digitalPinToInterrupt(pinEncoderA), contarPulsos, RISING);
 }
 
 void loop() {
-  static int ultimoContador = 0;
-  if (contadorPulsos != ultimoContador) {
+  if (contadorPulsos != ultimoContadorPulsos) { // Solo imprime si hay un cambio
+    float grados = (contadorPulsos / (float)pulsosPorRevolucion) * 360.0;
+    Serial.print(grados);
+    Serial.println(" grados");
+    Serial.print("Ángulo: ");
     Serial.print("Pulsos: ");
     Serial.println(contadorPulsos);
-
-    float angulo = (contadorPulsos * 360) / PPR;
-    Serial.print("Grados: ");
-    Serial.println(angulo);
-
-    Serial.print("prevPos: ");
-    Serial.println(prevPos);
-
-    if ((angulo >= 45) && (prevPos == 1 || prevPos == 3)) {
-      Serial.println("Sentido 1");
-      conteo_ciclos += 0.5;
-      Serial.println("holaaaa1");
-      Serial.print("contador: ");
-      Serial.println(conteo_ciclos);
-      prevPos = 2;
-    } else if ((angulo <= -45) && (prevPos == 1 || prevPos == 2)) {
-      Serial.println("Sentido 2");
-      conteo_ciclos += 0.5;
-      Serial.println("holaaaa2");
-      Serial.print("contador: ");
-      Serial.println(conteo_ciclos);
-      prevPos = 3;
-    }
-
-    ultimoContador = contadorPulsos;
+    
+    ultimoContadorPulsos = contadorPulsos; // Actualiza el último valor
   }
 }
-

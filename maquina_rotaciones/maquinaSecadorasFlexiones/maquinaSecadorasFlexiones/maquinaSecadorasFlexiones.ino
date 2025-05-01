@@ -1,3 +1,4 @@
+
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiMulti.h>
@@ -23,7 +24,6 @@ float gradosActuales = 0;
 // Variables para el contador de pulsos y la velocidad
 volatile long pulseCount = 0;
 volatile long pulseCountGrades = 0;
-volatile long pulsosGrados = 0;
 unsigned long lastTime = 0;
 float velocidadRPM = 0;
 int direction = 1;  // 1 para adelante, -1 para atrás
@@ -73,16 +73,6 @@ unsigned long tiempoFinPausa = 0;
 unsigned long tiempoActualPausado = 0;
 unsigned long tiempoPausadoAcumulado = 0;
  
-int conteoFlexSecadoras = 0;
-int flexionesSecadoras = 0;
-
-String eventName = "";
-
-float anguloA = 0.0;
-float anguloB = 0.0;
-float velocidadFPM = 0.0;
-float gradosAvance = 0.0;
-
 #define USE_SERIAL Serial
 
 // Función de interrupción para contar los pulsos del encoder
@@ -110,7 +100,6 @@ void IRAM_ATTR encoderISR() {
   pulseCount ++;
   pulseCountGrades ++;
   pulsesB ++;
-  pulsosGrados += direction;
 }
 
 void setup() {
@@ -144,65 +133,12 @@ void setup() {
 void loop() {
   socketIO.loop();
   // put your main code here, to run repeatedly:
-  if( (eventName == "mensajeSecadorasRotPausar") || (eventName == "mensajeSecadorasRot") ){
-    controlRotaciones();
-  } else if ((eventName == "mensajeSecadorasFlexPausar") || (eventName == "mensajeSecadorasFlex")){
-    controlFlexiones();
-  }
+  control();
 
-  // mandar_datos();
+  mandar_datos();
 }
 
-void controlFlexiones(){
-  
-  calcularVelocidad();
-  controlPID();
-
-  if((inicio_prueba == "NO") && ((setVelocidad != 0) && (anguloA !=0) && (anguloB !=0) && (flexionesSecadoras != 0))){
-
-    digitalWrite(pinMotorA, HIGH);
-    digitalWrite(pinMotorB, HIGH);
-
-    tiempo_actual = millis();
-    tiempo_prueba = (tiempo_actual - tiempo_inicio - tiempoPausadoAcumulado) / 1000;
-
-    gradosAvance = (pulsosGrados * 360 ) / PPR;
-
-    if ((gradosAvance >= anguloA ) && (prevPos == 1)) {
-      prevPos = 2;
-      conteoFlexSecadoras ++;
-    } else if ((gradosAvance <= anguloB ) && (prevPos == 2)){
-      prevPos = 1;
-      conteoFlexSecadoras ++;
-    }
-    
-    if(revolucionesTotales < setRevoluciones){
-
-      if ((gradosAvance >= anguloA ) && (prevPos == 1)) {
-        prevPos = 2;
-        conteoFlexSecadoras ++;
-      } else if ((gradosAvance <= anguloB ) && (prevPos == 2)){
-        prevPos = 1;
-        conteoFlexSecadoras ++;
-      }
-
-    } else{
-
-      conteoRevoluciones = 0;
-      setRevoluciones = 0;
-      estado_prueba = "finalizado";
-      setVelocidad = 0;
-      tiempoActualPausado = 0;
-      tiempoPausadoAcumulado = 0;
-      digitalWrite(pinMotorA, LOW);
-      digitalWrite(pinMotorB, LOW);
-
-    }
-
-  }
-}
-
-void controlRotaciones(){
+void control(){
 
   calcularVelocidad();
   controlPID();
@@ -236,6 +172,7 @@ void controlRotaciones(){
 
     } else{
 
+      conteoRevoluciones = 0;
       setRevoluciones = 0;
       estado_prueba = "finalizado";
       setVelocidad = 0;
@@ -275,7 +212,7 @@ void socketIOEvent(socketIOmessageType_t type, uint8_t * payload, size_t length)
             }
 
             // Obtener el nombre del evento (el primer elemento del array)
-            eventName = doc[0].as<String>();
+            String eventName = doc[0].as<String>();
 
             USE_SERIAL.printf("Evento recibido: %s\n", eventName.c_str());
 
@@ -332,140 +269,46 @@ void socketIOEvent(socketIOmessageType_t type, uint8_t * payload, size_t length)
                 digitalWrite(pinMotorB, HIGH);
                 }
               }
-
-            } else if (eventName == "mensajeSecadorasFlex"){
-
-              // El segundo elemento es el objeto que contiene los datos
-              JsonObject data = doc[1].as<JsonObject>();
-
-              flexionesSecadoras= doc[1]["mensaje"]["flexionesSecadoras"];  // 20
-              anguloA = doc[1]["mensaje"]["anguloA"]; 
-              anguloB = doc[1]["mensaje"]["anguloB"];
-              setVelocidad = doc[1]["mensaje"]["setVelocidadSecadorasFlex"];             
-              inicio_prueba = doc[1]["mensaje"]["pausarSecadorasFlex"].as<String>();  // 20
-
-              tiempo_prueba = 0;
-              conteoFlexSecadoras = 0;
-
-              estado_prueba = "Sistema funcionando";
-
-              // Mostrar los valores en el monitor serie
-              Serial.println(flexionesSecadoras);
-              Serial.println(anguloA);
-              Serial.println(anguloB);
-              Serial.println(setVelocidad);
-              Serial.println(inicio_prueba);
-
-              if( (flexionesSecadoras != 0) && (anguloA != 0) && (anguloB != 0) && setVelocidad != 0){
-                tiempo_inicio = millis();
-                estadoPausa = 1;
-              }
-
-            } else if (eventName ==  "mensajeSecadorasFlexPausar"){
-
-              JsonObject data = doc[1].as<JsonObject>();
-              inicio_prueba = doc[1]["mensaje"]["pausarSecadorasFlex"].as<String>();  // 20
-              Serial.println(inicio_prueba);
-
-              if(inicio_prueba == "SI"){
-                tiempoInicioPausa = millis();
-                estado_prueba = "Sistema Pausado";
-                estadoPausa = 2;
-
-                digitalWrite(pinMotorA, LOW);
-                digitalWrite(pinMotorB, LOW);
-
-              } else if (inicio_prueba == "NO") {
-
-                if(estadoPausa == 2){
-                  tiempoFinPausa = millis();
-                  tiempoActualPausado = tiempoFinPausa - tiempoInicioPausa;
-                  tiempoPausadoAcumulado = tiempoPausadoAcumulado + tiempoActualPausado;
-                  tiempoInicioPausa = 0;
-                  estado_prueba = "Sistema trabajando";
-                  estadoPausa = 1;
-
-                  digitalWrite(pinMotorA, HIGH);
-                  digitalWrite(pinMotorB, HIGH);
-                }
-
-              }
             }
-            // Verificar si las claves existen y obtener los valores con seguridad
+
+                // Verificar si las claves existen y obtener los valores con seguridad
             break;
     }
 }
 
+
 void mandar_datos(){
-
-  if( (eventName == "mensajeSecadorasRotPausar") || (eventName == "mensajeSecadorasRot") ){
-    uint64_t now = millis();
+  uint64_t now = millis();
 
     if(now - messageTimestamp > 2000) {
-      messageTimestamp = now;
+        messageTimestamp = now;
 
-      // creat JSON message for Socket.IO (event)
-      DynamicJsonDocument doc(1024);
-      JsonArray array = doc.to<JsonArray>();
+        // creat JSON message for Socket.IO (event)
+        DynamicJsonDocument doc(1024);
+        JsonArray array = doc.to<JsonArray>();
 
-      // add evnet name
-      // Hint: socket.on('event_name', ....
-      array.add("datosEspSecadorasRot");
+        // add evnet name
+        // Hint: socket.on('event_name', ....
+        array.add("datosEspSecadorasRot");
 
-      // add payload (parameters) for the event
-      JsonObject param1 = array.createNestedObject();
-      param1["conteo_revSecadorasRot"] = revolucionesTotales;   
-      param1["estado_pruebaSecadorasRot"] = estado_prueba;
-      param1["tiempo_pruebaSecadorasRot"] = tiempo_prueba;
-      param1["velocidad_SecadorasRot"] = velocidadRPM;
-      param1["setRevSecadorasRot"] = setRevoluciones;               
-  
-      // JSON to String (serializion)
-      String output;
-      serializeJson(doc, output);
-
-      // Send event
-      socketIO.sendEVENT(output);
-
-      // Print JSON for debugging
-      USE_SERIAL.println(output);
-    }
-
-  } else if ((eventName == "mensajeSecadorasFlexPausar") || (eventName == "mensajeSecadorasFlex")){
-
-    uint64_t now = millis();
-
-    if(now - messageTimestamp > 2000) {
-      messageTimestamp = now;
-
-      // creat JSON message for Socket.IO (event)
-      DynamicJsonDocument doc(1024);
-      JsonArray array = doc.to<JsonArray>();
-
-      // add evnet name
-      // Hint: socket.on('event_name', ....
-      array.add("datosEspSecadorasFlex");
-
-      // add payload (parameters) for the event
-      JsonObject param1 = array.createNestedObject();
-      param1["conteoFlexSecadoras"] = conteoFlexSecadoras;   
-      param1["estadoSecadorasFlex"] = estado_prueba;
-      param1["tiempoSecadorasFlex"] = tiempo_prueba;
-      param1["velocidadFlexiones"] = velocidadFPM;
-      param1["flexionesSecadoras"] =flexionesSecadoras;               
-  
-      // JSON to String (serializion)
-      String output;
-      serializeJson(doc, output);
-
-      // Send event
-      socketIO.sendEVENT(output);
-
-      // Print JSON for debugging
-      USE_SERIAL.println(output);
-    }
+        // add payload (parameters) for the event
+        JsonObject param1 = array.createNestedObject();
+        param1["conteo_revSecadorasRot"] = revolucionesTotales;   
+        param1["estado_pruebaSecadorasRot"] = estado_prueba;
+        param1["tiempo_pruebaSecadorasRot"] = tiempo_prueba;
+        param1["velocidad_SecadorasRot"] = velocidadRPM;
+        param1["setRevSecadorasRot"] = setRevoluciones;               
     
-  }
+        // JSON to String (serializion)
+        String output;
+        serializeJson(doc, output);
+
+        // Send event
+        socketIO.sendEVENT(output);
+
+        // Print JSON for debugging
+        USE_SERIAL.println(output);
+    }
 }
 
 void conexion_internet(){
@@ -474,7 +317,7 @@ void conexion_internet(){
           USE_SERIAL.flush();
           delay(1000);
       }
-    WiFiMulti.addAP("ITK-Servidor", "atazavcan");
+    WiFiMulti.addAP("victus", "12345678");
 
     //WiFi.disconnect();
     while(WiFiMulti.run() != WL_CONNECTED) {
@@ -485,10 +328,11 @@ void conexion_internet(){
     USE_SERIAL.printf("[SETUP] WiFi Connected %s\n", ip.c_str());
 
     // server address, port and URL
-    socketIO.begin("192.168.0.101", 5000, "/socket.io/?EIO=4");
+    socketIO.begin("10.224.54.198", 5000, "/socket.io/?EIO=4");
     // event handler
     socketIO.onEvent(socketIOEvent);
 }
+
 
 void calcularVelocidad(){
   // Obtén el tiempo actual
@@ -537,7 +381,10 @@ void calcularGrados(){
   */
 }
 
+
 void controlPID(){
+
+  
   error = setVelocidad - velocidadRPM;
 
   //Ecuacion control PID discreto
