@@ -52,7 +52,7 @@ float pasosAnguloB = 0.0;
 float pasosCicloFlex = 0.0;
 
 //Variables para el control del motor a pasos ROTACIONES
-const int pasosPorCiclo = 1600;
+const int pasosPorCiclo = 4000;
 unsigned long tiempoAnterior = 0;
 unsigned long intervaloPaso = 0.0; // Microsegundos, ajusta para cambiar velocidad 312.5 para 1 rps
 bool estadoPulso = LOW;
@@ -74,7 +74,7 @@ int contadorPasosCalibracion = 0;
 int contadorPasosCopia = 0;
 unsigned long tiempoAnteriorCalibrar = 0;
 float pasosCalibrar = 0.0;
-int intervaloCalibrar = 625;
+int intervaloCalibrar = 62;
 
 #define USE_SERIAL Serial
 
@@ -251,8 +251,6 @@ void controlRotaciones(){
         tiempoInicioDireccion = HIGH;
         prevPos = 1;
         RPM = 0;
-        numeroRotaciones = 0;
-        numeroRotacionesCambio = 0;
         conteoRotacionesCambio = 0;
         estado_prueba = "finalizado";
         tiempoActualPausado = 0;
@@ -300,10 +298,14 @@ void socketIOEvent(socketIOmessageType_t type, uint8_t * payload, size_t length)
                 // El segundo elemento es el objeto que contiene los datos
                 JsonObject data = doc[1].as<JsonObject>();
 
-                numeroRotaciones = doc[1]["mensaje"]["revolucionesSecadoras"];  // 20
-                numeroRotacionesCambio = doc[1]["mensaje"]["revCambioSecadoras"]; 
-                RPM = doc[1]["mensaje"]["velocidadRevoluciones"];             
+                int numeroRotacionesCopy = doc[1]["mensaje"]["revolucionesSecadoras"];  // 20
+                int numeroRotacionesCambioCopy = doc[1]["mensaje"]["revCambioSecadoras"]; 
+                int RPMCopy = doc[1]["mensaje"]["velocidadRevoluciones"];             
                 inicio_prueba = doc[1]["mensaje"]["pausarSecadorasRot"].as<String>();  // 20
+
+                numeroRotaciones = numeroRotacionesCopy * 10;
+                numeroRotacionesCambio = numeroRotacionesCambioCopy * 10;
+                RPM = RPMCopy * 10;
 
                 tiempo_prueba = 0;
                 //conteoRotaciones = 0;
@@ -354,10 +356,13 @@ void socketIOEvent(socketIOmessageType_t type, uint8_t * payload, size_t length)
               JsonObject data = doc[1].as<JsonObject>();
 
               flexionesSecadoras= doc[1]["mensaje"]["flexionesSecadoras"];  // 20
-              anguloA = doc[1]["mensaje"]["anguloA"]; 
-              anguloB = doc[1]["mensaje"]["anguloB"];
+              int anguloACopy = doc[1]["mensaje"]["anguloA"]; 
+              int anguloBCopy = doc[1]["mensaje"]["anguloB"];
               setVelocidad = doc[1]["mensaje"]["setVelocidadSecadorasFlex"];             
               inicio_prueba = doc[1]["mensaje"]["pausarSecadorasFlex"].as<String>();  // 20
+
+              anguloA = anguloACopy * 10;
+              anguloB = anguloBCopy * 10;
 
               tiempo_prueba = 0;
               conteoFlexiones = 0;
@@ -407,8 +412,10 @@ void socketIOEvent(socketIOmessageType_t type, uint8_t * payload, size_t length)
               }
             } else if (eventName == "mensajeCalibrarSecadoras"){
               JsonObject data = doc[1].as<JsonObject>();
-              gradosCalibrar = doc[1]["mensaje"]["gradosCalibrar"];  // 20
+              int gradosCalibrarCopy = doc[1]["mensaje"]["gradosCalibrar"];  // 20
               sentido = doc[1]["mensaje"]["sentido"].as<String>(); 
+
+              gradosCalibrar = gradosCalibrarCopy * 10;
 
               Serial.print("Sentido");
               Serial.println(sentido);
@@ -418,7 +425,7 @@ void socketIOEvent(socketIOmessageType_t type, uint8_t * payload, size_t length)
 
               contadorPasosCalibracion = 0;
 
-              pasosCalibrar = (gradosCalibrar * 1600)/360;
+              pasosCalibrar = (gradosCalibrar * 40000)/360;
 
               if (sentido == "Horario"){
                 digitalWrite(DIR, LOW);
@@ -452,11 +459,11 @@ void mandar_datos(){
 
       // add payload (parameters) for the event
       JsonObject param1 = array.createNestedObject();
-      param1["conteo_revSecadorasRot"] = conteoRotaciones;   
+      param1["conteo_revSecadorasRot"] = conteoRotaciones/10;   
       param1["estado_pruebaSecadorasRot"] = estado_prueba;
       param1["tiempo_pruebaSecadorasRot"] = tiempo_prueba;
-      param1["velocidad_SecadorasRot"] = RPM;
-      param1["setRevSecadorasRot"] = numeroRotaciones;               
+      param1["velocidad_SecadorasRot"] = RPM/10;
+      param1["setRevSecadorasRot"] = numeroRotaciones/10;               
   
       // JSON to String (serializion)
       String output;
@@ -512,7 +519,7 @@ void conexion_internet(){
           USE_SERIAL.flush();
           delay(1000);
       }
-    WiFiMulti.addAP("victus", "12345678");
+    WiFiMulti.addAP("Carlos galaxy s10", "12345678");
 
     //WiFi.disconnect();
     while(WiFiMulti.run() != WL_CONNECTED) {
@@ -523,7 +530,7 @@ void conexion_internet(){
     USE_SERIAL.printf("[SETUP] WiFi Connected %s\n", ip.c_str());
 
     // server address, port and URL
-    socketIO.begin("10.224.55.216", 5000, "/socket.io/?EIO=4"); // 192.168.0.101
+    socketIO.begin("10.224.55.8", 5000, "/socket.io/?EIO=4"); // 192.168.0.101
     // event handler
     socketIO.onEvent(socketIOEvent);
 }
@@ -653,7 +660,6 @@ void controlFlexiones(){
         tiempoInicioDireccion = 0;
         prevPosFlex = 0;
         setVelocidad = 0;
-        flexionesSecadoras = 0;
         anguloA = 0;
         anguloB = 0;
         estado_prueba = "finalizado";
@@ -689,5 +695,3 @@ void controlCalibrar(){
     }
   }
 }
-
-

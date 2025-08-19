@@ -10,7 +10,7 @@ volatile unsigned int pulseCount =0;
 unsigned int pulseCountCopy =0;
 unsigned long durationTotal = 0;
 unsigned long periodo = 0;
-unsigned long controMicros = 0;
+unsigned long controMicros = 0;+
 
 // interrupt handler
 void freqCounterCallback() {

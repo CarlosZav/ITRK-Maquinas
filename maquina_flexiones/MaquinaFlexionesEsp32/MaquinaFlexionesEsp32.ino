@@ -342,7 +342,7 @@ void conexion_internet(){
           USE_SERIAL.flush();
           delay(1000);
       }
-    WiFiMulti.addAP("ITK-Servidor", "atazavcan");
+    WiFiMulti.addAP("Carlos galaxy s10", "12345678");
 
     //WiFi.disconnect();
     while(WiFiMulti.run() != WL_CONNECTED) {
@@ -353,7 +353,7 @@ void conexion_internet(){
     USE_SERIAL.printf("[SETUP] WiFi Connected %s\n", ip.c_str());
 
     // server address, port and URL
-    socketIO.begin("192.168.0.101", 5000, "/socket.io/?EIO=4");
+    socketIO.begin("10.224.54.90", 5000, "/socket.io/?EIO=4");
     // event handler
     socketIO.onEvent(socketIOEvent);
 }
