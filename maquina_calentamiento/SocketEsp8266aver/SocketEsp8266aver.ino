@@ -66,7 +66,6 @@ void socketIOEvent(socketIOmessageType_t type, uint8_t * payload, size_t length)
             socketIO.send(sIOtype_CONNECT, "/");
             break;
         case sIOtype_EVENT:
-            USE_SERIAL.printf("holaaaa");
             USE_SERIAL.printf("[IOc] get event: %s\n", payload);
 
             // Deserializar el payload en un objeto JSON
@@ -120,7 +119,7 @@ void setup() {
     USE_SERIAL.begin(115200);
 
     //Serial.setDebugOutput(true);
-    USE_SERIAL.setDebugOutput(true);
+    //USE_SERIAL.setDebugOutput(true);
 
     USE_SERIAL.println();
     USE_SERIAL.println();
@@ -159,8 +158,6 @@ void loop() {
   socketIO.loop();
 
   realizar_ciclos();
-
-  medir_sensor();
 
   mandar_datos();
 
@@ -258,34 +255,4 @@ void mandar_datos(){
         // Print JSON for debugging
         USE_SERIAL.println(output);
     }
-}
-
-void medir_sensor(){
-  unsigned long tiempo_actual = millis();
-
-  // Si aún estamos dentro del intervalo de 1 segundo
-  if (tiempo_actual - tiempo_inicio < INTERVALO) {
-    int lectura = analogRead(ssrPin);
-    int diferencia = lectura - OFFSET;
-    suma_cuadrados += diferencia * diferencia;
-    contador++;
-  }
-
-  // Si ya pasó 1 segundo, calcular y reiniciar
-  if (tiempo_actual - tiempo_inicio >= INTERVALO) {
-    if (contador > 0) {  // Evitar división por cero
-      float rms_adc = sqrt((float)suma_cuadrados / contador);
-      corriente = rms_adc / SENSIBILIDAD_ADC;
-
-      Serial.print("Corriente RMS: ");
-      Serial.print(corriente);
-      Serial.println(" A");
-    }
-
-    // Reiniciar todo
-    suma_cuadrados = 0;
-    contador = 0;
-    tiempo_inicio = millis();  // empezar nuevo ciclo
-  }
-
 }

@@ -1,3 +1,5 @@
+#include <SocketIoClient.h>
+
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiMulti.h>
@@ -13,9 +15,9 @@ float angulo = 0.0;
 int estadoPausa = 0;
 
 // Pines valvulas
-int pin_valvulaA = 32; // 
+int pin_valvulaA = 25; // 
 int pin_valvulaB = 33; //
-int pinValvulaPrincipal = 25;
+int pinValvulaPrincipal = 32;
 
 // Pines del encoder
 const int pinA = 18; // Canal A del encoder (GPIO 34)
@@ -342,7 +344,7 @@ void conexion_internet(){
           USE_SERIAL.flush();
           delay(1000);
       }
-    WiFiMulti.addAP("Carlos galaxy s10", "12345678");
+    WiFiMulti.addAP("ITK-Servidor", "atazavcan");
 
     //WiFi.disconnect();
     while(WiFiMulti.run() != WL_CONNECTED) {
@@ -353,7 +355,7 @@ void conexion_internet(){
     USE_SERIAL.printf("[SETUP] WiFi Connected %s\n", ip.c_str());
 
     // server address, port and URL
-    socketIO.begin("10.224.54.90", 5000, "/socket.io/?EIO=4");
+    socketIO.begin("192.168.0.101", 5000, "/socket.io/?EIO=4");
     // event handler
     socketIO.onEvent(socketIOEvent);
 }

@@ -52,7 +52,7 @@ float pasosAnguloB = 0.0;
 float pasosCicloFlex = 0.0;
 
 //Variables para el control del motor a pasos ROTACIONES
-const int pasosPorCiclo = 4000;
+const int pasosPorCiclo = 800;
 unsigned long tiempoAnterior = 0;
 unsigned long intervaloPaso = 0.0; // Microsegundos, ajusta para cambiar velocidad 312.5 para 1 rps
 bool estadoPulso = LOW;
@@ -74,7 +74,7 @@ int contadorPasosCalibracion = 0;
 int contadorPasosCopia = 0;
 unsigned long tiempoAnteriorCalibrar = 0;
 float pasosCalibrar = 0.0;
-int intervaloCalibrar = 62;
+int intervaloCalibrar = 620;
 
 #define USE_SERIAL Serial
 
@@ -425,14 +425,43 @@ void socketIOEvent(socketIOmessageType_t type, uint8_t * payload, size_t length)
 
               contadorPasosCalibracion = 0;
 
-              pasosCalibrar = (gradosCalibrar * 40000)/360;
+              pasosCalibrar = (gradosCalibrar * 800)/360;
 
               if (sentido == "Horario"){
                 digitalWrite(DIR, LOW);
               } else if (sentido == "Antihorario"){
                 digitalWrite(DIR, HIGH);
               } else if (sentido == "EstablecerCero"){
+
                 contadorPasosCopia = 0;
+                tiempo_prueba = 0;
+                pasosCero = 0;
+                contadorPasos = 0;
+                direccion = HIGH;
+                tiempoInicioDireccion = 0;
+                prevPosFlex = 0;
+                setVelocidad = 0;
+                anguloA = 0;
+                anguloB = 0;
+                estado_prueba = "finalizado";
+                tiempoActualPausado = 0;
+                tiempoPausadoAcumulado = 0;
+
+                Serial.println("0 ESTABLECIDO");
+ 
+                DynamicJsonDocument docSend(512);
+  
+                JsonArray arraySend = docSend.to<JsonArray>();
+  
+                arraySend.add("calibrarEspConfirmacionSecadoras");
+                JsonObject msg = arraySend.createNestedObject();
+  
+                msg["conexion"] = "calibrarEspConfirmacionSecadoras";
+  
+                String output;
+                serializeJson(docSend, output);
+                socketIO.sendEVENT(output);
+                USE_SERIAL.println(output);
               }
           
             }
@@ -519,7 +548,7 @@ void conexion_internet(){
           USE_SERIAL.flush();
           delay(1000);
       }
-    WiFiMulti.addAP("Carlos galaxy s10", "12345678");
+    WiFiMulti.addAP("ITK-Servidor", "atazavcan");
 
     //WiFi.disconnect();
     while(WiFiMulti.run() != WL_CONNECTED) {
@@ -530,7 +559,7 @@ void conexion_internet(){
     USE_SERIAL.printf("[SETUP] WiFi Connected %s\n", ip.c_str());
 
     // server address, port and URL
-    socketIO.begin("10.224.55.8", 5000, "/socket.io/?EIO=4"); // 192.168.0.101
+    socketIO.begin("192.168.0.101", 5000, "/socket.io/?EIO=4"); // 192.168.0.101
     // event handler
     socketIO.onEvent(socketIOEvent);
 }
@@ -617,7 +646,7 @@ void controlFlexiones(){
         }
 
         if(contadorPasos >= pasosCicloFlex ){
-          prevPos = 1;
+          prevPosFlex = 1;
           direccion = !direccion;
           digitalWrite(DIR, direccion);
           conteoFlexiones ++;
@@ -628,7 +657,7 @@ void controlFlexiones(){
 
       unsigned long tiempoActual = micros();
 
-      if (contadorPasosCopia != 0 && tipoPrueba == 0){ // Aquí modificarIntervaloPaso
+      if (contadorPasosCopia != 0){ // Aquí modificarIntervaloPaso
         if (tiempoActual - tiempoAnterior >= intervaloPaso){
           if (contadorPasosCopia < 0){
             digitalWrite(DIR, HIGH);

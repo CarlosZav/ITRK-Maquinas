@@ -1,17 +1,16 @@
 #include <Arduino.h>
-#include <ESP8266WiFi.h>
-#include <ESP8266WiFiMulti.h>
+#include <WiFi.h>
+#include <WiFiMulti.h>
 #include <ArduinoJson.h>
 #include <WebSocketsClient.h>
 #include <SocketIOclient.h>
-#include <Hash.h>
 #include <EEPROM.h>
 
-ESP8266WiFiMulti WiFiMulti;
+WiFiMulti WiFiMulti;
 SocketIOclient socketIO;
 
 // Pines valvulas
-const int pin_valvulaA = 2; // Apagado arriba, Prendido baja
+const int pin_valvulaA = 15; // Apagado arriba, Prendido baja
 
 unsigned long setTiempoPrendido = 0;
 unsigned long setTiempoApagado = 0;

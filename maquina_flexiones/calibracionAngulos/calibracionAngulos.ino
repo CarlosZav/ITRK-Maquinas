@@ -1,26 +1,40 @@
 #include <Arduino.h>
 
+volatile int ultimoEstadoA = 0; // Último estado del pin A
 volatile int contadorPulsos = 0;
-const int pinEncoderA = 18; // GPIO de la señal A del encoder
-const int pinEncoderB = 19; // GPIO de la señal B del encoder
-const int pulsosPorRevolucion = 600; // Número de pulsos por vuelta del encoder
+const int pinA = 19; // GPIO de la señal A del encoder
+const int pinB = 18; // GPIO de la señal B del encoder
+const int pulsosPorRevolucion = 1200; // Número de pulsos por vuelta del encoder
 
 int ultimoContadorPulsos = 0; // Variable para almacenar el último valor de contadorPulsos
 
-void IRAM_ATTR contarPulsos() {
-  int estadoB = digitalRead(pinEncoderB);
-  if (estadoB == HIGH) {
-    contadorPulsos++;
-  } else {
-    contadorPulsos--;
+void IRAM_ATTR encoderISR() {
+  int estadoA = digitalRead(pinA);
+  int estadoB = digitalRead(pinB);
+
+  // Determinar dirección según el cambio de estados
+  if (estadoA != ultimoEstadoA) {
+    if (estadoA == estadoB) {
+      contadorPulsos++; // Girando en sentido horario
+    } else {
+      contadorPulsos--; // Girando en sentido antihorario
+    }
   }
+  ultimoEstadoA = estadoA; // Actualizar el estado previo
 }
 
 void setup() {
   Serial.begin(115200);
-  pinMode(pinEncoderA, INPUT);
-  pinMode(pinEncoderB, INPUT);
-  attachInterrupt(digitalPinToInterrupt(pinEncoderA), contarPulsos, RISING);
+  // Configurar pines del encoder como entradas
+  pinMode(pinA, INPUT);
+  pinMode(pinB, INPUT);
+
+  // Leer estado inicial del canal A
+  ultimoEstadoA = digitalRead(pinA);
+
+  // Configurar interrupción para el canal A
+  attachInterrupt(digitalPinToInterrupt(pinA), encoderISR, CHANGE);
+
 }
 
 void loop() {
